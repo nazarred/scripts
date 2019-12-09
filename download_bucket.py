@@ -78,13 +78,17 @@ def download_dir(local, bucket, client):
         if not os.path.exists(os.path.dirname(dest_pathname)):
             logger.info(f"Create empty folder {dest_pathname}")
             os.makedirs(os.path.dirname(dest_pathname))
+    files_count = len(keys)
+    count = 1
     for k in keys:
         dest_pathname = os.path.join(local, k)
         if not os.path.exists(os.path.dirname(dest_pathname)):
             logger.info(f"Create folder for key {dest_pathname}")
             os.makedirs(os.path.dirname(dest_pathname))
+        logger.info(f"File {count}/{files_count}")
         logger.info(f"Download file {k}")
-        client.download_file(bucket, k, dest_pathname)
+        # client.download_file(bucket, k, dest_pathname)
+        count += 1
 
 
 if __name__ == "__main__":
