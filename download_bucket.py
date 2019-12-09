@@ -87,7 +87,7 @@ def download_dir(local, bucket, client):
             os.makedirs(os.path.dirname(dest_pathname))
         logger.info(f"File {count}/{files_count}")
         logger.info(f"Download file {k}")
-        # client.download_file(bucket, k, dest_pathname)
+        client.download_file(bucket, k, dest_pathname)
         count += 1
 
 
