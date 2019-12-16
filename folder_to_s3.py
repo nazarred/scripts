@@ -10,6 +10,7 @@ import sys
 import backoff as backoff
 import boto3
 from boto3.s3.transfer import TransferConfig
+from botocore.exceptions import ClientError
 from urllib3.exceptions import MaxRetryError
 
 logger = logging.getLogger('s3_uploading')
@@ -77,6 +78,17 @@ class ProgressPercentage(object):
 def upload_file(path, key):
     config = TransferConfig(multipart_threshold=1024*25, max_concurrency=16,
                             multipart_chunksize=1024*25, use_threads=True)
+    skip = True
+    try:
+        obj = s3.head_object(Bucket=BUCKET, Key=key)
+        if obj['ResponseMetadata']['HTTPStatusCode'] != 200:
+            skip = False
+    except Exception as e:
+        skip = False
+
+    if skip:
+        logger.info(f"Object with key {key} exist skipping...")
+        return
     s3.upload_file(
         path,
         BUCKET,
