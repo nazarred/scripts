@@ -112,3 +112,5 @@ for file_path in all_files:
     upload_file(str(file_path), s3_key)
     logger.info(f"Uploaded {count}/{total_files_count}")
     count += 1
+
+('ce64db2e-b845-44af-a6ba-0f908c855eb4', '0679d616-933f-4fea-9747-df57dc8e380a', 'f4b3419a-6b7f-4227-9f15-71960913aa6b', '800c7be6-6128-4588-9bce-0d7087ea15d7', '074a0e98-1cad-4e35-8ef5-4deed3bbe117', 'c631699b-2c59-49d6-861b-49d09a34d223', 'b7212aeb-35bf-403b-a578-17a50cf06112', '753fbbfe-23b4-4264-9690-5b0a2d49d346', '3fe55b3d-5e8f-4c01-9b7f-29183b63e56e', '3928a887-2c26-41a3-afa8-acbbbd44683a', 'c7c1e027-4c6a-4011-8db9-2698cb7512f8', 'f572cac5-d16d-4ecd-83a8-03175601d079')
