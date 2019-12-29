@@ -107,8 +107,8 @@ def upload_file(path, key, cont_disposition):
 def get_file_name_from_minio(s3_key):
     # key = path.replace('/mnt/storage/lidarmill/lidarmill-production2/', '')
     session = boto3.session.Session(
-        aws_access_key_id='B3LndsTDUtmamyfv',
-        aws_secret_access_key='uQ7E65QLgabutFBSCVvj',
+        aws_access_key_id='',
+        aws_secret_access_key='',
     )
     s3 = session.client(
         "s3",
