@@ -136,6 +136,8 @@ count = 1
 for file_path in all_files:
     related_file_path = file_path.relative_to(folder_path)
     s3_key = str(related_file_path)
+    if "data_directories" in s3_key and "out" in s3_key:
+        logger.info(f"Skipping path {file_path}")
     file_name = get_file_name_from_minio(s3_key)
     logger.info(f"Uploading file {file_path} with key {s3_key}")
     upload_file(str(file_path), s3_key, file_name)
