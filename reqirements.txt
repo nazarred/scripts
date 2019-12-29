@@ -1,2 +1,3 @@
 boto3==1.13.32
 backoff==1.9.2
+psycopg2

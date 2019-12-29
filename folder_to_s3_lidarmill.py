@@ -6,11 +6,12 @@ import threading
 from pathlib import Path
 import logging
 import sys
+import psycopg2
 
 import backoff as backoff
 import boto3
 from boto3.s3.transfer import TransferConfig
-from botocore.exceptions import ClientError
+from uuid import UUID
 from urllib3.exceptions import MaxRetryError
 
 logger = logging.getLogger('s3_uploading')
@@ -106,8 +107,8 @@ def upload_file(path, key, cont_disposition):
 def get_file_name_from_minio(s3_key):
     # key = path.replace('/mnt/storage/lidarmill/lidarmill-production2/', '')
     session = boto3.session.Session(
-        aws_access_key_id='',
-        aws_secret_access_key='',
+        aws_access_key_id='B3LndsTDUtmamyfv',
+        aws_secret_access_key='uQ7E65QLgabutFBSCVvj',
     )
     s3 = session.client(
         "s3",
@@ -125,10 +126,39 @@ def get_file_name_from_minio(s3_key):
         else:
             logger.warning(f"Can't get ContentDisposition for object {s3_key}")
 
+DATABASE_URI = os.environ.get("DB_URL")
+
+
+try:
+    # connect to DB
+    logging.info('Trying connect to DB..')
+    conn = psycopg2.connect(DATABASE_URI)
+    cursor = conn.cursor()
+except Exception as error:
+    logging.warning("Can't connect to DB: %s" % error)
+    raise Exception
+
+def get_file_name_from_db(s3_key, cursor):
+    data_file_id = Path(s3_key).stem
+    logger.info(f"Trying to get file name from the db")
+    # check if file name is a UUID
+    try:
+        uuid_obj = UUID(data_file_id, version=4)
+    except ValueError:
+        logger.info(f"Filename {data_file_id} is not UUID id.")
+    else:
+        cursor.execute(f"SELECT file_name FROM data_file WHERE id='{data_file_id}'")
+        obj = cursor.fetchone()
+        if obj:
+            logger.info(f"Found name {obj[0]} in the DB")
+            return obj[0]
+        else:
+            logger.warning(f"Could not find datafile {s3_key}")
+
 
 # Get all files in the folder recursively
 all_files = [
-        Path(f) for f in glob.glob(str(folder_path / "**"), recursive=True) if Path(f).is_file()
+        Path(f) for f in glob.glob(str(folder_path / "**"), recursive=True) if Path(f).is_file() and not ("data_directories" in f and "out" in f)
     ]
 total_files_count = len(all_files)
 logger.info(f"Found {total_files_count}")
@@ -138,7 +168,12 @@ for file_path in all_files:
     s3_key = str(related_file_path)
     if "data_directories" in s3_key and "out" in s3_key:
         logger.info(f"Skipping path {file_path}")
-    file_name = get_file_name_from_minio(s3_key)
+        continue
+    file_name = None
+    if "data_directories/" not in s3_key:
+        file_name = get_file_name_from_db(s3_key, cursor)
+        if not file_name:
+            file_name = get_file_name_from_minio(s3_key)
     logger.info(f"Uploading file {file_path} with key {s3_key}")
     upload_file(str(file_path), s3_key, file_name)
     logger.info(f"Uploaded {count}/{total_files_count}")
