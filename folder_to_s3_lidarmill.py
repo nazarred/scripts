@@ -75,7 +75,7 @@ class ProgressPercentage(object):
 @backoff.on_exception(
         backoff.expo, (ValueError, MaxRetryError, ConnectionError), max_tries=5
     )
-def upload_file(path, key):
+def upload_file(path, key, cont_disposition):
     config = TransferConfig(multipart_threshold=1024*25, max_concurrency=16,
                             multipart_chunksize=1024*25, use_threads=True)
     skip = True
@@ -89,13 +89,41 @@ def upload_file(path, key):
     if skip:
         logger.info(f"Object with key {key} exist skipping...")
         return
+    if cont_disposition:
+        extra = {"ContentDisposition": cont_disposition}
+    else:
+        extra = {}
     s3.upload_file(
         path,
         BUCKET,
         key,
+        ExtraArgs=extra,
         Config=config,
         Callback=ProgressPercentage(path)
     )
+
+
+def get_file_name_from_minio(s3_key):
+    # key = path.replace('/mnt/storage/lidarmill/lidarmill-production2/', '')
+    session = boto3.session.Session(
+        aws_access_key_id='',
+        aws_secret_access_key='',
+    )
+    s3 = session.client(
+        "s3",
+        endpoint_url='https://storage.lidarmill.com:9001',
+        use_ssl=True,
+    )
+    try:
+        cont_desp = s3.get_object(Bucket='lidarmill-production2', Key=s3_key).get('ContentDisposition')
+    except Exception:
+        logger.warning(f"Can't get object {s3_key}")
+    else:
+        if cont_desp:
+            logger.info(f"Found cont desp {cont_desp} for {s3_key} ")
+            return cont_desp.replace('attachment; filename=', '').strip('"').strip(' ').strip("'")
+        else:
+            logger.warning(f"Can't get ContentDisposition for object {s3_key}")
 
 
 # Get all files in the folder recursively
@@ -108,7 +136,8 @@ count = 1
 for file_path in all_files:
     related_file_path = file_path.relative_to(folder_path)
     s3_key = str(related_file_path)
+    file_name = get_file_name_from_minio(s3_key)
     logger.info(f"Uploading file {file_path} with key {s3_key}")
-    upload_file(str(file_path), s3_key)
+    upload_file(str(file_path), s3_key, file_name)
     logger.info(f"Uploaded {count}/{total_files_count}")
     count += 1
