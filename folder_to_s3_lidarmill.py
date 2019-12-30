@@ -1,5 +1,6 @@
 """Upload all files and folders from input folder recursively."""
 import argparse
+import concurrent.futures
 import glob
 import os
 import threading
@@ -76,7 +77,7 @@ class ProgressPercentage(object):
 @backoff.on_exception(
         backoff.expo, (ValueError, MaxRetryError, ConnectionError), max_tries=5
     )
-def upload_file(path, key, cont_disposition):
+def upload_file(path, key, cont_disposition, count, total_files_count):
     config = TransferConfig(multipart_threshold=1024*25, max_concurrency=16,
                             multipart_chunksize=1024*25, use_threads=True)
     skip = True
@@ -102,6 +103,8 @@ def upload_file(path, key, cont_disposition):
         Config=config,
         Callback=ProgressPercentage(path)
     )
+    logger.info(f"Uploaded {count}/{total_files_count}")
+    return "success"
 
 
 def get_file_name_from_minio(s3_key):
@@ -151,7 +154,7 @@ def get_file_name_from_db(s3_key, cursor):
         obj = cursor.fetchone()
         if obj:
             logger.info(f"Found name {obj[0]} in the DB")
-            return obj[0]
+            return f'attachment; filename="{obj[0]}"'
         else:
             logger.warning(f"Could not find datafile {s3_key}")
 
@@ -162,19 +165,34 @@ all_files = [
     ]
 total_files_count = len(all_files)
 logger.info(f"Found {total_files_count}")
-count = 1
-for file_path in all_files:
-    related_file_path = file_path.relative_to(folder_path)
-    s3_key = str(related_file_path)
-    if "data_directories" in s3_key and "out" in s3_key:
-        logger.info(f"Skipping path {file_path}")
-        continue
-    file_name = None
-    if "data_directories/" not in s3_key:
-        file_name = get_file_name_from_db(s3_key, cursor)
-        if not file_name:
-            file_name = get_file_name_from_minio(s3_key)
-    logger.info(f"Uploading file {file_path} with key {s3_key}")
-    upload_file(str(file_path), s3_key, file_name)
-    logger.info(f"Uploaded {count}/{total_files_count}")
-    count += 1
+count = 0
+res = []
+with concurrent.futures.ThreadPoolExecutor(
+        max_workers=12
+) as executor:
+    for file_path in all_files:
+        related_file_path = file_path.relative_to(folder_path)
+        s3_key = str(related_file_path)
+        if "data_directories" in s3_key and "out" in s3_key:
+            logger.info(f"Skipping path {file_path}")
+            continue
+        file_name = None
+        if "data_directories/" not in s3_key:
+            file_name = get_file_name_from_db(s3_key, cursor)
+            # if not file_name:
+            #     file_name = get_file_name_from_minio(s3_key)
+        logger.info(f"Uploading file {file_path} with key {s3_key}")
+        count += 1
+        res.append(
+            executor.submit(
+                upload_file,
+                str(file_path),
+                s3_key,
+                file_name,
+                count,
+                total_files_count
+            )
+        )
+
+for m in res:
+    logger.info(m)
