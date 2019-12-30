@@ -95,14 +95,14 @@ def upload_file(path, key, cont_disposition, count, total_files_count):
         extra = {"ContentDisposition": cont_disposition}
     else:
         extra = {}
-    # s3.upload_file(
-    #     path,
-    #     BUCKET,
-    #     key,
-    #     ExtraArgs=extra,
-    #     Config=config,
-    #     Callback=ProgressPercentage(path)
-    # )
+    s3.upload_file(
+        path,
+        BUCKET,
+        key,
+        ExtraArgs=extra,
+        Config=config,
+        Callback=ProgressPercentage(path)
+    )
     logger.info(f"Uploaded {count}/{total_files_count}")
     return "success"
 
@@ -160,14 +160,14 @@ def get_file_name_from_db(s3_key, cursor):
 
 
 # Get all files in the folder recursively
-all_files = [
-        Path(f) for f in glob.glob(str(folder_path / "**"), recursive=True) if Path(f).is_file() and not ("data_directories" in f and "out" in f)
-    ]
-total_files_count = len(all_files)
+# all_files = [
+#         Path(f) for f in glob.glob(str(folder_path / "**"), recursive=True) if Path(f).is_file() and not ("data_directories" in f and "out" in f)
+#     ]
+total_files_count = 14220
 logger.info(f"Found {total_files_count}")
 count = 0
 res = []
-with open('/root/scripts/all_files.txt' 'r') as f:
+with open('/root/scripts/all_files.txt', 'r') as f:
 
     with concurrent.futures.ThreadPoolExecutor(
             max_workers=12
