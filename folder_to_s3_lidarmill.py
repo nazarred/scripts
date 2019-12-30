@@ -167,32 +167,35 @@ total_files_count = len(all_files)
 logger.info(f"Found {total_files_count}")
 count = 0
 res = []
-with concurrent.futures.ThreadPoolExecutor(
-        max_workers=12
-) as executor:
-    for file_path in all_files:
-        related_file_path = file_path.relative_to(folder_path)
-        s3_key = str(related_file_path)
-        if "data_directories" in s3_key and "out" in s3_key:
-            logger.info(f"Skipping path {file_path}")
-            continue
-        file_name = None
-        if "data_directories/" not in s3_key:
-            file_name = get_file_name_from_db(s3_key, cursor)
-            # if not file_name:
-            #     file_name = get_file_name_from_minio(s3_key)
-        logger.info(f"Uploading file {file_path} with key {s3_key}")
-        count += 1
-        res.append(
-            executor.submit(
-                upload_file,
-                str(file_path),
-                s3_key,
-                file_name,
-                count,
-                total_files_count
+with open('/root/scripts/all_files.txt' 'r') as f:
+
+    with concurrent.futures.ThreadPoolExecutor(
+            max_workers=12
+    ) as executor:
+        for l in f.readlines():
+            file_path = Path(l.strip('\n'))
+            related_file_path = file_path.relative_to(folder_path)
+            s3_key = str(related_file_path)
+            if "data_directories" in s3_key and "out" in s3_key:
+                logger.info(f"Skipping path {file_path}")
+                continue
+            file_name = None
+            if "data_directories/" not in s3_key:
+                file_name = get_file_name_from_db(s3_key, cursor)
+                # if not file_name:
+                #     file_name = get_file_name_from_minio(s3_key)
+            logger.info(f"Uploading file {file_path} with key {s3_key}")
+            count += 1
+            res.append(
+                executor.submit(
+                    upload_file,
+                    str(file_path),
+                    s3_key,
+                    file_name,
+                    count,
+                    total_files_count
+                )
             )
-        )
 
 for m in res:
     logger.info(m)
