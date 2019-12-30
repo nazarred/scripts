@@ -95,14 +95,14 @@ def upload_file(path, key, cont_disposition, count, total_files_count):
         extra = {"ContentDisposition": cont_disposition}
     else:
         extra = {}
-    s3.upload_file(
-        path,
-        BUCKET,
-        key,
-        ExtraArgs=extra,
-        Config=config,
-        Callback=ProgressPercentage(path)
-    )
+    # s3.upload_file(
+    #     path,
+    #     BUCKET,
+    #     key,
+    #     ExtraArgs=extra,
+    #     Config=config,
+    #     Callback=ProgressPercentage(path)
+    # )
     logger.info(f"Uploaded {count}/{total_files_count}")
     return "success"
 
