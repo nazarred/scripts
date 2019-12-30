@@ -170,7 +170,7 @@ res = []
 with open('/root/scripts/all_files.txt', 'r') as f:
 
     with concurrent.futures.ThreadPoolExecutor(
-            max_workers=12
+            max_workers=6
     ) as executor:
         for l in f.readlines():
             file_path = Path(l.strip('\n'))
