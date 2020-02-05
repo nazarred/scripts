@@ -46,10 +46,10 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--disable-threads", action="store_true", help="Disable threads for downloading.",
+    "--disable-threads", action="store_true", help="Disable using threads for downloading.",
 )
 parser.add_argument(
-    "--debug", action="store_true", help="Run in debug mode",
+    "--debug", action="store_true", help="Show debug logs",
 )
 parser.add_argument(
     "-f",
