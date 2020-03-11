@@ -20,11 +20,15 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.INFO)
 f_handler = logging.FileHandler("downloads.log")
 f_handler.setLevel(logging.DEBUG)
+e_handler = logging.FileHandler("downloads-errors.log")
+e_handler.setLevel(logging.ERROR)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 f_handler.setFormatter(formatter)
+e_handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.addHandler(f_handler)
+logger.addHandler(e_handler)
 
 # Parse args
 parser = argparse.ArgumentParser()
@@ -109,10 +113,13 @@ def download_file(url: str, full_path: Path, destiny: Path):
         logger.warning(f"Can't download dir {full_path.name}")
         return str(full_path)
     # Continue requesting at the current position until everything has been downloaded.
+    skip = False
     with open(str(full_path), "wb") as f:
         while (size_written == 0 and actual_size is None) or (
             actual_size is not None and size_written < actual_size
         ):
+            if skip:
+                break
             send_headers = {
                 "Range": "bytes={begin}-{end}".format(
                     begin=size_written, end=actual_size
@@ -126,11 +133,15 @@ def download_file(url: str, full_path: Path, destiny: Path):
             resp = requests.get(url, timeout=1200, stream=True, headers=headers,)
             # Treat everything 2xx as okay.
             if resp.status_code < 200 or resp.status_code >= 300:
-                logger.info(
+                logger.error(
                     f"Couldn't download file.\nURL: {url}\n"
                     f"Status Code: {resp.status_code}\n"
+                    f"Headers: {headers}"
+                    f"actual_size: {actual_size}"
+                    f"size_written: {size_written}"
                 )
-                sys.exit(1)
+                skip = True
+                continue
 
             for chunk in resp.iter_content(chunk_size=1024):
                 if chunk:
@@ -176,11 +187,11 @@ def download_files(files: list, destiny: Path):
                     executor.submit(download_file, file_url, full_path, destiny)
                 )
         for future in data_files_download_results:
-            file_name = future.result()
-            if file_name:
+            file_name = Path(future.result())
+            if file_name.is_file():
                 logger.debug(f"Download of file {file_name} done.")
             else:
-                logger.warning(f"Couldn't download  {file_name}")
+                logger.error(f"Failed to download {file_name}")
     else:
         for file_url, file_name in files:
             logger.debug(f"Downloading {file_url} into file {file_name}")
