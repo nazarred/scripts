@@ -1,21 +1,32 @@
 """Upload all files and folders from input folder recursively."""
 import argparse
+import multiprocessing
 import os
 from pathlib import Path
 import logging
 import sys
 import boto3
+from botocore.config import Config
 
+import concurrent.futures
+
+cpu_count = 24
 
 logger = logging.getLogger('s3_downloading')
 logger.setLevel(logging.DEBUG)
 
 handler = logging.StreamHandler(sys.stdout)
-f_handler = logging.FileHandler('s3_upload.log')
+f_handler = logging.FileHandler('s3_download.log')
 handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 f_handler.setFormatter(formatter)
+
+e_handler = logging.FileHandler("s3_downloads-errors.log")
+e_handler.setLevel(logging.ERROR)
+e_handler.setFormatter(formatter)
+
+logger.addHandler(e_handler)
 logger.addHandler(handler)
 logger.addHandler(f_handler)
 
@@ -43,7 +54,28 @@ s3 = session.client(
     "s3",
     endpoint_url=ENDPOINT,
     use_ssl=True,
+    config=Config(max_pool_connections=200),
+
 )
+
+
+def download_file(bucket, k, dest_pathname, count, total):
+    session_s = boto3.session.Session(
+        aws_access_key_id=ACCESS_KEY,
+        aws_secret_access_key=SECRET_KEY,
+    )
+    client = session_s.client(
+        "s3",
+        endpoint_url=ENDPOINT,
+        use_ssl=True,
+        config=Config(max_pool_connections=200),
+
+    )
+    client.download_file(bucket, k, dest_pathname)
+
+    logger.info(f"Downloaded {count}/{total} {dest_pathname}")
+
+    return dest_pathname, Path(dest_pathname).is_file()
 
 
 def download_dir(local, bucket, client):
@@ -80,15 +112,26 @@ def download_dir(local, bucket, client):
             os.makedirs(os.path.dirname(dest_pathname))
     files_count = len(keys)
     count = 1
-    for k in keys:
-        dest_pathname = os.path.join(local, k)
-        if not os.path.exists(os.path.dirname(dest_pathname)):
-            logger.info(f"Create folder for key {dest_pathname}")
-            os.makedirs(os.path.dirname(dest_pathname))
-        logger.info(f"File {count}/{files_count}")
-        logger.info(f"Download file {k}")
-        client.download_file(bucket, k, dest_pathname)
-        count += 1
+    data_files_download_results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
+        for k in keys:
+            dest_pathname = os.path.join(local, k)
+            if not os.path.exists(os.path.dirname(dest_pathname)):
+                logger.info(f"Create folder for key {dest_pathname}")
+                os.makedirs(os.path.dirname(dest_pathname))
+            logger.info(f"File {count}/{files_count}")
+            logger.info(f"Download file {k}")
+            data_files_download_results.append(
+                executor.submit(download_file, bucket, k, dest_pathname, count, files_count)
+            )
+            count += 1
+
+    for future in data_files_download_results:
+        dest_pathname, is_file = future.result()
+        if not is_file:
+            logger.error(f"Failed to download file {dest_pathname}")
+        else:
+            logger.info(f"Successfully downloaded {dest_pathname}")
 
 
 if __name__ == "__main__":
