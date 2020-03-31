@@ -23,10 +23,14 @@ parser.add_argument("--s3-secret-key", help="Secret Access Key")
 parser.add_argument("--endpoint", help="Endpoint url")
 parser.add_argument("--bucket", help="target S3 bucket")
 parser.add_argument("--prefix", help="S3 bucket prefix")
+parser.add_argument(
+    "--skip-existing", action="store_true", help="Skip existing files",
+)
 args = parser.parse_args()
 
 folder_path = Path(args.f)
 prefix = args.prefix
+SKIP_EXISTING = args.skip_existing
 ACCESS_KEY = args.s3_access_key
 SECRET_KEY = args.s3_secret_key
 BUCKET = args.bucket
@@ -73,8 +77,19 @@ def download_file(bucket, k, dest_pathname, count, total):
         use_ssl=True,
         config=Config(max_pool_connections=200),
     )
-    client.download_file(bucket, k, dest_pathname)
+    if Path(dest_pathname).is_file() and SKIP_EXISTING:
+        try:
+            obj = client.head_object(Bucket=BUCKET, Key=k)
+            if (
+                    obj["ResponseMetadata"]["HTTPStatusCode"] == 200
+                    and obj.get("ContentLength") == Path(dest_pathname).stat().st_size
+            ):
+                logger.info(f"File {dest_pathname} already exists.")
+                return dest_pathname, Path(dest_pathname).is_file()
+        except Exception as e:
+            logger.error(f"While getting head object error was raised: {e}")
 
+    client.download_file(bucket, k, dest_pathname)
     logger.info(f"Downloaded {count}/{total} {dest_pathname}")
 
     return dest_pathname, Path(dest_pathname).is_file()
