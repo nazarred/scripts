@@ -37,9 +37,11 @@ parser.add_argument('--s3-access-key', help='Access Key Id', )
 parser.add_argument('--s3-secret-key', help='Secret Access Key')
 parser.add_argument('--endpoint', help='Endpoint url')
 parser.add_argument('--bucket', help='target S3 bucket')
+parser.add_argument('--prefix', help='S3 bucket prefix')
 args = parser.parse_args()
 
 folder_path = Path(args.f)
+prefix = args.prefix
 ACCESS_KEY = args.s3_access_key
 SECRET_KEY = args.s3_secret_key
 BUCKET = args.bucket
@@ -78,7 +80,7 @@ def download_file(bucket, k, dest_pathname, count, total):
     return dest_pathname, Path(dest_pathname).is_file()
 
 
-def download_dir(local, bucket, client):
+def download_dir(local, bucket, client, prefix=None):
     """
     params:
     - prefix: pattern to match in s3
@@ -92,6 +94,8 @@ def download_dir(local, bucket, client):
     base_kwargs = {
         'Bucket': bucket,
     }
+    if prefix:
+        base_kwargs['Prefix'] = prefix
     while next_token is not None:
         kwargs = base_kwargs.copy()
         if next_token != '':
@@ -135,4 +139,4 @@ def download_dir(local, bucket, client):
 
 
 if __name__ == "__main__":
-    download_dir(folder_path, BUCKET, s3)
+    download_dir(folder_path, BUCKET, s3, prefix)
