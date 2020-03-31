@@ -31,8 +31,11 @@ parser.add_argument("--bucket", help="target S3 bucket")
 parser.add_argument(
     "--guess-type", action="store_true", help="Guess MIME type for files",
 )
+parser.add_argument("--prefix", help="S3 bucket prefix")
+
 args = parser.parse_args()
 
+prefix = args.prefix
 parsed_path = Path(args.f)
 guess_type = args.guess_type
 ACCESS_KEY = args.s3_access_key
@@ -136,11 +139,15 @@ def upload_file(path, key, count, total):
     return key, True
 
 
-def main(folder_path: Path):
+def main(folder_path: Path, prefix_path: str = None):
     # Get all files in the folder recursively
+    if prefix_path:
+        final_path = folder_path / prefix_path
+    else:
+        final_path = folder_path
     all_files = [
         Path(f)
-        for f in glob.glob(str(folder_path / "**"), recursive=True)
+        for f in glob.glob(str(final_path / "**"), recursive=True)
         if Path(f).is_file()
     ]
     total_files_count = len(all_files)
