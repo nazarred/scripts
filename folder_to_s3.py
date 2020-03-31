@@ -175,4 +175,4 @@ def main(folder_path: Path, prefix_path: str = None):
 
 
 if __name__ == "__main__":
-    main(parsed_path)
+    main(parsed_path, prefix)
