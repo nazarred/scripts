@@ -81,8 +81,8 @@ def download_file(bucket, k, dest_pathname, count, total):
         try:
             obj = client.head_object(Bucket=BUCKET, Key=k)
             if (
-                    obj["ResponseMetadata"]["HTTPStatusCode"] == 200
-                    and obj.get("ContentLength") == Path(dest_pathname).stat().st_size
+                obj["ResponseMetadata"]["HTTPStatusCode"] == 200
+                and obj.get("ContentLength") == Path(dest_pathname).stat().st_size
             ):
                 logger.info(f"File {dest_pathname} already exists.")
                 return dest_pathname, Path(dest_pathname).is_file()
@@ -103,8 +103,7 @@ def download_dir(local, bucket, client, prefix=None):
     - bucket: s3 bucket with target contents
     - client: initialized s3 client object
     """
-    keys = []
-    dirs = []
+
     next_token = ""
     base_kwargs = {
         "Bucket": bucket,
@@ -112,6 +111,8 @@ def download_dir(local, bucket, client, prefix=None):
     if prefix:
         base_kwargs["Prefix"] = prefix
     while next_token is not None:
+        keys = []
+        dirs = []
         kwargs = base_kwargs.copy()
         if next_token != "":
             kwargs.update({"ContinuationToken": next_token})
@@ -123,36 +124,38 @@ def download_dir(local, bucket, client, prefix=None):
                 keys.append(k)
             else:
                 dirs.append(k)
-        next_token = results.get("NextContinuationToken")
-    for d in dirs:
-        dest_pathname = os.path.join(local, d)
-        if not os.path.exists(os.path.dirname(dest_pathname)):
-            logger.info(f"Create empty folder {dest_pathname}")
-            os.makedirs(os.path.dirname(dest_pathname))
-    files_count = len(keys)
-    count = 1
-    data_files_download_results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
-        for k in keys:
-            dest_pathname = os.path.join(local, k)
+        for d in dirs:
+            dest_pathname = os.path.join(local, d)
             if not os.path.exists(os.path.dirname(dest_pathname)):
-                logger.info(f"Create folder for key {dest_pathname}")
+                logger.info(f"Create empty folder {dest_pathname}")
                 os.makedirs(os.path.dirname(dest_pathname))
-            logger.info(f"File {count}/{files_count}")
-            logger.info(f"Download file {k}")
-            data_files_download_results.append(
-                executor.submit(
-                    download_file, bucket, k, dest_pathname, count, files_count
-                )
-            )
-            count += 1
 
-    for future in data_files_download_results:
-        dest_pathname, is_file = future.result()
-        if not is_file:
-            logger.error(f"Failed to download file {dest_pathname}")
-        else:
-            logger.info(f"Successfully downloaded {dest_pathname}")
+        files_count = len(keys)
+        count = 1
+        data_files_download_results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
+            for k in keys:
+                dest_pathname = os.path.join(local, k)
+                if not os.path.exists(os.path.dirname(dest_pathname)):
+                    logger.info(f"Create folder for key {dest_pathname}")
+                    os.makedirs(os.path.dirname(dest_pathname))
+                logger.info(f"File {count}/{files_count}")
+                logger.info(f"Download file {k}")
+                data_files_download_results.append(
+                    executor.submit(
+                        download_file, bucket, k, dest_pathname, count, files_count
+                    )
+                )
+                count += 1
+
+        for future in data_files_download_results:
+            dest_pathname, is_file = future.result()
+            if not is_file:
+                logger.error(f"Failed to download file {dest_pathname}")
+            else:
+                logger.info(f"Successfully downloaded {dest_pathname}")
+
+        next_token = results.get("NextContinuationToken")
 
 
 if __name__ == "__main__":
