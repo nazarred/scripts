@@ -110,7 +110,9 @@ def download_dir(local, bucket, client, prefix=None):
     }
     if prefix:
         base_kwargs["Prefix"] = prefix
+    t = 0
     while next_token is not None:
+        logger.info(f"{t} thousands")
         keys = []
         dirs = []
         kwargs = base_kwargs.copy()
@@ -139,7 +141,7 @@ def download_dir(local, bucket, client, prefix=None):
                 if not os.path.exists(os.path.dirname(dest_pathname)):
                     logger.info(f"Create folder for key {dest_pathname}")
                     os.makedirs(os.path.dirname(dest_pathname))
-                logger.info(f"File {count}/{files_count}")
+                logger.info(f"File {count}/{files_count + 1000 * t}")
                 logger.info(f"Download file {k}")
                 data_files_download_results.append(
                     executor.submit(
@@ -156,6 +158,8 @@ def download_dir(local, bucket, client, prefix=None):
                 logger.info(f"Successfully downloaded {dest_pathname}")
 
         next_token = results.get("NextContinuationToken")
+        t += 1
+
 
 
 if __name__ == "__main__":
