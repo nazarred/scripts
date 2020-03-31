@@ -12,23 +12,6 @@ import concurrent.futures
 
 cpu_count = 24
 
-logger = logging.getLogger('s3_downloading')
-logger.setLevel(logging.DEBUG)
-
-handler = logging.StreamHandler(sys.stdout)
-f_handler = logging.FileHandler('s3_download.log')
-handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-f_handler.setFormatter(formatter)
-
-e_handler = logging.FileHandler("s3_downloads-errors.log")
-e_handler.setLevel(logging.ERROR)
-e_handler.setFormatter(formatter)
-
-logger.addHandler(e_handler)
-logger.addHandler(handler)
-logger.addHandler(f_handler)
 
 parser = argparse.ArgumentParser()
 
@@ -46,6 +29,26 @@ ACCESS_KEY = args.s3_access_key
 SECRET_KEY = args.s3_secret_key
 BUCKET = args.bucket
 ENDPOINT = f"https://{args.endpoint}" if args.endpoint else None
+
+logger = logging.getLogger('s3_downloading')
+logger.setLevel(logging.DEBUG)
+
+handler = logging.StreamHandler(sys.stdout)
+f_handler = logging.FileHandler(f's3_download_{BUCKET}.log')
+handler.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+f_handler.setFormatter(formatter)
+
+e_handler = logging.FileHandler(f"s3_downloads-errors_{BUCKET}.log")
+e_handler.setLevel(logging.ERROR)
+e_handler.setFormatter(formatter)
+
+logger.addHandler(e_handler)
+logger.addHandler(handler)
+logger.addHandler(f_handler)
+
+
 logger.info(f"Path {folder_path}, credentials: {ACCESS_KEY}, {SECRET_KEY}, {BUCKET}, {ENDPOINT}")
 
 session = boto3.session.Session(
