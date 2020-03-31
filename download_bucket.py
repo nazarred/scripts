@@ -88,8 +88,10 @@ def download_file(bucket, k, dest_pathname, count, total):
                 return dest_pathname, Path(dest_pathname).is_file()
         except Exception as e:
             logger.error(f"While getting head object error was raised: {e}")
-
-    client.download_file(bucket, k, dest_pathname)
+    try:
+        client.download_file(bucket, k, dest_pathname)
+    except Exception as e:
+        logger.error(f"Failed to download {k}, error {e}")
     logger.info(f"Downloaded {count}/{total} {dest_pathname}")
 
     return dest_pathname, Path(dest_pathname).is_file()
@@ -119,6 +121,7 @@ def download_dir(local, bucket, client, prefix=None):
         if next_token != "":
             kwargs.update({"ContinuationToken": next_token})
         results = client.list_objects_v2(**kwargs)
+        next_token = results.get("NextContinuationToken")
         contents = results.get("Contents")
         for i in contents:
             k = i.get("Key")
@@ -157,7 +160,6 @@ def download_dir(local, bucket, client, prefix=None):
             else:
                 logger.info(f"Successfully downloaded {dest_pathname}")
 
-        next_token = results.get("NextContinuationToken")
         t += 1
 
 
