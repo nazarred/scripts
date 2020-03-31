@@ -29,12 +29,12 @@ parser.add_argument("--endpoint", help="Endpoint url")
 parser.add_argument("--bucket", help="target S3 bucket")
 # currently will try to make html files type 'text/html' and set ContentDisposition inline
 parser.add_argument(
-    "--guess-type", action="store_false", help="Guess MIME type for files",
+    "--guess-type", action="store_true", help="Guess MIME type for files",
 )
 args = parser.parse_args()
 
 parsed_path = Path(args.f)
-guess_type = Path(args.guess_type)
+guess_type = args.guess_type
 ACCESS_KEY = args.s3_access_key
 SECRET_KEY = args.s3_secret_key
 BUCKET = args.bucket
