@@ -88,7 +88,7 @@ class ProgressPercentage(object):
 @backoff.on_exception(
     backoff.expo, (ValueError, MaxRetryError, ConnectionError), max_tries=5
 )
-def upload_file(path, key, count, total):
+def upload_file(path, key, count):
     config = TransferConfig(
         multipart_threshold=1024 * 1024,
         max_concurrency=10,
@@ -135,7 +135,7 @@ def upload_file(path, key, count, total):
         # Callback=ProgressPercentage(path),
         ExtraArgs=extra_args,
     )
-    logger.info(f"Uploaded {count}/{total} {path}")
+    logger.info(f"Uploaded ({count}) {path}")
     return key, True
 
 
@@ -145,24 +145,27 @@ def main(folder_path: Path, prefix_path: str = None):
         final_path = folder_path / prefix_path
     else:
         final_path = folder_path
-    all_files = [
-        Path(f)
-        for f in glob.glob(str(final_path / "**"), recursive=True)
-        if Path(f).is_file()
-    ]
-    total_files_count = len(all_files)
+    # all_files = [
+    #     Path(f)
+    #     for f in glob.glob(str(final_path / "**"), recursive=True)
+    #     if Path(f).is_file()
+    # ]
+    # total_files_count = len(all_files)
     logger.info(f"Found {total_files_count}")
     count = 1
     data_files_upload_results = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
-        for file_path in all_files:
+        for file_path in glob.glob(str(final_path / "**"), recursive=True):
+            file_path = Path(file_path)
+            if not file_path.is_file():
+                continue
             related_file_path = file_path.relative_to(folder_path)
             s3_key = str(related_file_path)
             logger.info(f"Uploading file {file_path} with key {s3_key}")
             data_files_upload_results.append(
                 executor.submit(
-                    upload_file, str(file_path), s3_key, count, total_files_count
+                    upload_file, str(file_path), s3_key, count
                 )
             )
             count += 1
