@@ -151,7 +151,7 @@ def main(folder_path: Path, prefix_path: str = None):
     #     if Path(f).is_file()
     # ]
     # total_files_count = len(all_files)
-    logger.info(f"Found {total_files_count}")
+    # logger.info(f"Found {total_files_count}")
     count = 1
     data_files_upload_results = []
 
