@@ -91,7 +91,7 @@ class ProgressPercentage(object):
 def upload_file(path, key, count):
     config = TransferConfig(
         multipart_threshold=1024 * 1024,
-        max_concurrency=10,
+        max_concurrency=5,
         multipart_chunksize=1024 * 1024,
         use_threads=True,
     )
