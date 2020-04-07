@@ -17,7 +17,7 @@ from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
 from urllib3.exceptions import MaxRetryError
 
-cpu_count = 12
+cpu_count = 24
 
 
 parser = argparse.ArgumentParser()
@@ -156,7 +156,7 @@ def main(folder_path: Path, prefix_path: str = None):
     data_files_upload_results = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
-        for file_path in glob.glob(str(final_path / "**"), recursive=True):
+        for file_path in glob.iglob(str(final_path / "**"), recursive=True):
             file_path = Path(file_path)
             if not file_path.is_file():
                 continue
@@ -169,6 +169,7 @@ def main(folder_path: Path, prefix_path: str = None):
                 )
             )
             count += 1
+
     for future in data_files_upload_results:
         key, uploaded = future.result()
         if not uploaded:
