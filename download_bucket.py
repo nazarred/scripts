@@ -26,9 +26,12 @@ parser.add_argument("--prefix", help="S3 bucket prefix")
 parser.add_argument(
     "--skip-existing", action="store_true", help="Skip existing files",
 )
+parser.add_argument("--keys-file", help="File with list of keys to download (one key - one line)")
+
 args = parser.parse_args()
 
 folder_path = Path(args.f)
+keys_file_path = Path(args.keys_file) if args.keys_file else None
 prefix = args.prefix
 SKIP_EXISTING = args.skip_existing
 ACCESS_KEY = args.s3_access_key
@@ -97,72 +100,111 @@ def download_file(bucket, k, dest_pathname, count, total):
     return dest_pathname, Path(dest_pathname).is_file()
 
 
-def download_dir(local, bucket, client, prefix=None):
+def file_len(fname):
+    i = 0
+    with open(fname) as f:
+        for i, l in enumerate(f, 1):
+            pass
+    return i
+
+
+def download_bucket(local, bucket, client, prefix_key: str = None, keys_file: Path = None):
     """
     params:
-    - prefix: pattern to match in s3
+    - prefix_key: pattern to match in s3 (will be ignored if keys_file is specified)
     - local: local path to folder in which to place files
     - bucket: s3 bucket with target contents
     - client: initialized s3 client object
+    - keys_file: path to the file with list of S3 keys
     """
 
-    next_token = ""
-    base_kwargs = {
-        "Bucket": bucket,
-    }
-    if prefix:
-        base_kwargs["Prefix"] = prefix
-    t = 0
-    while next_token is not None:
-        logger.info(f"{t} thousands")
-        keys = []
-        dirs = []
-        kwargs = base_kwargs.copy()
-        if next_token != "":
-            kwargs.update({"ContinuationToken": next_token})
-        results = client.list_objects_v2(**kwargs)
-        next_token = results.get("NextContinuationToken")
-        contents = results.get("Contents")
-        for i in contents:
-            k = i.get("Key")
-            if k[-1] != "/":
-                keys.append(k)
-            else:
-                dirs.append(k)
-        for d in dirs:
-            dest_pathname = os.path.join(local, d)
-            if not os.path.exists(os.path.dirname(dest_pathname)):
-                logger.info(f"Create empty folder {dest_pathname}")
-                os.makedirs(os.path.dirname(dest_pathname))
-
-        files_count = len(keys)
-        count = 1
+    if keys_file and keys_file.is_file():
+        logger.info(f"Reading keys list from {keys_file}")
         data_files_download_results = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
-            for k in keys:
-                dest_pathname = os.path.join(local, k)
-                if not os.path.exists(os.path.dirname(dest_pathname)):
-                    logger.info(f"Create folder for key {dest_pathname}")
-                    os.makedirs(os.path.dirname(dest_pathname))
-                logger.info(f"File {count}/{files_count + 1000 * t}")
-                logger.info(f"Download file {k}")
-                data_files_download_results.append(
-                    executor.submit(
-                        download_file, bucket, k, dest_pathname, count, files_count
+        count = 1
+        files_count = file_len(str(keys_file))
+        with open(str(keys_file), "r") as f:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
+                for k in f:
+                    k = k.strip("\n")
+                    if not k:
+                        continue
+                    dest_pathname = os.path.join(local, k)
+                    if not os.path.exists(os.path.dirname(dest_pathname)):
+                        logger.info(f"Create folder for key {dest_pathname}")
+                        os.makedirs(os.path.dirname(dest_pathname))
+                    logger.info(f"File {count}/{files_count}")
+                    logger.info(f"Download file {k}")
+                    data_files_download_results.append(
+                        executor.submit(
+                            download_file, bucket, k, dest_pathname, count, files_count
+                        )
                     )
-                )
-                count += 1
+                    count += 1
 
-        for future in data_files_download_results:
-            dest_pathname, is_file = future.result()
-            if not is_file:
-                logger.error(f"Failed to download file {dest_pathname}")
-            else:
-                logger.info(f"Successfully downloaded {dest_pathname}")
+            for future in data_files_download_results:
+                dest_pathname, is_file = future.result()
+                if not is_file:
+                    logger.error(f"Failed to download file {dest_pathname}")
+                else:
+                    logger.info(f"Successfully downloaded {dest_pathname}")
+    else:
+        next_token = ""
+        base_kwargs = {
+            "Bucket": bucket,
+        }
+        if prefix_key:
+            base_kwargs["Prefix"] = prefix_key
+        t = 0
+        while next_token is not None:
+            logger.info(f"{t} thousands")
+            keys = []
+            dirs = []
+            kwargs = base_kwargs.copy()
+            if next_token != "":
+                kwargs.update({"ContinuationToken": next_token})
+            results = client.list_objects_v2(**kwargs)
+            next_token = results.get("NextContinuationToken")
+            contents = results.get("Contents")
+            for i in contents:
+                k = i.get("Key")
+                if k[-1] != "/":
+                    keys.append(k)
+                else:
+                    dirs.append(k)
+            for d in dirs:
+                dest_pathname = os.path.join(local, d)
+                if not os.path.exists(os.path.dirname(dest_pathname)):
+                    logger.info(f"Create empty folder {dest_pathname}")
+                    os.makedirs(os.path.dirname(dest_pathname))
 
-        t += 1
+            files_count = len(keys)
+            count = 1
+            data_files_download_results = []
+            with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
+                for k in keys:
+                    dest_pathname = os.path.join(local, k)
+                    if not os.path.exists(os.path.dirname(dest_pathname)):
+                        logger.info(f"Create folder for key {dest_pathname}")
+                        os.makedirs(os.path.dirname(dest_pathname))
+                    logger.info(f"File {count}/{files_count + 1000 * t}")
+                    logger.info(f"Download file {k}")
+                    data_files_download_results.append(
+                        executor.submit(
+                            download_file, bucket, k, dest_pathname, count, files_count
+                        )
+                    )
+                    count += 1
 
+            for future in data_files_download_results:
+                dest_pathname, is_file = future.result()
+                if not is_file:
+                    logger.error(f"Failed to download file {dest_pathname}")
+                else:
+                    logger.info(f"Successfully downloaded {dest_pathname}")
+
+            t += 1
 
 
 if __name__ == "__main__":
-    download_dir(folder_path, BUCKET, s3, prefix)
+    download_bucket(folder_path, BUCKET, s3, prefix, keys_file_path)
