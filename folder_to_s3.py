@@ -104,6 +104,7 @@ def upload_file(path, key, count):
         use_ssl=True,
         config=Config(max_pool_connections=200),
     )
+    message = ''
     try:
         obj = client.head_object(Bucket=BUCKET, Key=key)
         if (
@@ -117,8 +118,9 @@ def upload_file(path, key, count):
         skip = False
 
     if skip:
-        logger.info(f"Object with key {key} exist skipping...")
-        return key, False
+        message = f"Object with key {key} exist skipping.."
+        logger.info(message)
+        return key, False, message
     extra_args = {}
     if guess_type:
         mimetype = mimetypes.guess_type(path)
@@ -136,7 +138,7 @@ def upload_file(path, key, count):
         ExtraArgs=extra_args,
     )
     logger.info(f"Uploaded ({count}) {path}")
-    return key, True
+    return key, True, message
 
 
 def main(folder_path: Path, prefix_path: str = None):
@@ -152,30 +154,38 @@ def main(folder_path: Path, prefix_path: str = None):
     # ]
     # total_files_count = len(all_files)
     # logger.info(f"Found {total_files_count}")
-    count = 1
+    count = 0
+    uploaded_count = 1
     data_files_upload_results = []
+    files_to_upload = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
-        for file_path in glob.iglob(str(final_path / "**"), recursive=True):
-            file_path = Path(file_path)
-            if not file_path.is_file():
-                continue
-            related_file_path = file_path.relative_to(folder_path)
-            s3_key = str(related_file_path)
-            logger.info(f"Uploading file {file_path} with key {s3_key}")
-            data_files_upload_results.append(
-                executor.submit(
-                    upload_file, str(file_path), s3_key, count
-                )
-            )
-            count += 1
-
-    for future in data_files_upload_results:
-        key, uploaded = future.result()
-        if not uploaded:
-            logger.error(f"Failed to upload file {key}")
-        else:
-            logger.info(f"Successfully uploaded {key}")
+    for file_path in glob.iglob(str(final_path / "**"), recursive=True):
+        count += 1
+        if not Path(file_path).is_file():
+            continue
+        files_to_upload.append(file_path)
+        if count % 10000:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
+                for file_path_to_upload in files_to_upload:
+                    file_path_to_upload = Path(file_path_to_upload)
+                    related_file_path = file_path_to_upload.relative_to(folder_path)
+                    s3_key = str(related_file_path)
+                    logger.info(f"Uploading file {file_path_to_upload} with key {s3_key}")
+                    data_files_upload_results.append(
+                        executor.submit(
+                            upload_file, str(file_path_to_upload), s3_key, uploaded_count
+                        )
+                    )
+                    uploaded_count += 1
+            for future in data_files_upload_results:
+                key, uploaded, message = future.result()
+                if not uploaded:
+                    logger.error(f"Failed to upload file {key}, {message}")
+                else:
+                    logger.info(f"Successfully uploaded {key}")
+            data_files_upload_results = []
+            files_to_upload = []
+            logger.info(f'Total uploaded {count} files')
 
 
 if __name__ == "__main__":
