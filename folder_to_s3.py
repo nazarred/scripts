@@ -164,7 +164,7 @@ def main(folder_path: Path, prefix_path: str = None):
         if not Path(file_path).is_file():
             continue
         files_to_upload.append(file_path)
-        if count % 10000:
+        if count % 10000 == 0:
             with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
                 for file_path_to_upload in files_to_upload:
                     file_path_to_upload = Path(file_path_to_upload)
