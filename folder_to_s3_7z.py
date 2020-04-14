@@ -46,8 +46,7 @@ guess_type = args.guess_type
 ACCESS_KEY = args.s3_access_key
 SECRET_KEY = args.s3_secret_key
 BUCKET = args.bucket
-ENDPOINT = f"https://{args.endpoint}"
-
+ENDPOINT = f"https://{args.endpoint}" if args.endpoint else None
 
 logger = logging.getLogger("s3_uploading")
 logger.setLevel(logging.DEBUG)
