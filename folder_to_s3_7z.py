@@ -194,7 +194,7 @@ def main(folder_path: Path, prefix_path: str = None):
                 "-t7z",
                 str(file_path_7z_to_upload),
                 "-m0=lzma2",
-                "-mx=0",
+                "-mx=9",
                 "-mfb=64",
                 "-md=32m",
                 "-ms=on",
