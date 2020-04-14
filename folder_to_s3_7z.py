@@ -2,6 +2,7 @@
 import argparse
 import mimetypes
 import multiprocessing
+import subprocess
 import concurrent.futures
 import glob
 import os
@@ -17,12 +18,13 @@ from boto3.s3.transfer import TransferConfig
 from botocore.exceptions import ClientError
 from urllib3.exceptions import MaxRetryError
 
-cpu_count = 24
+cpu_count = 2
 
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument("--f", help="Path to the folder pretented for uploading")
+parser.add_argument("--tmp-dir", help="Path to store temporary archives")
 parser.add_argument("--s3-access-key", help="Access Key Id")
 parser.add_argument("--s3-secret-key", help="Secret Access Key")
 parser.add_argument("--endpoint", help="Endpoint url")
@@ -37,6 +39,8 @@ args = parser.parse_args()
 
 prefix = args.prefix
 parsed_path = Path(args.f)
+tmp_folder = Path(args.tmp_dir)
+
 guess_type = args.guess_type
 ACCESS_KEY = args.s3_access_key
 SECRET_KEY = args.s3_secret_key
@@ -48,12 +52,12 @@ logger = logging.getLogger("s3_uploading")
 logger.setLevel(logging.DEBUG)
 
 handler = logging.StreamHandler(sys.stdout)
-f_handler = logging.FileHandler(f"s3_upload_{BUCKET}.log")
+f_handler = logging.FileHandler(f"s3_upload_7z_{BUCKET}.log")
 handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 f_handler.setFormatter(formatter)
-e_handler = logging.FileHandler(f"s3_upload-errors_{BUCKET}.log")
+e_handler = logging.FileHandler(f"s3_upload-7z-errors_{BUCKET}.log")
 e_handler.setLevel(logging.ERROR)
 e_handler.setFormatter(formatter)
 logger.addHandler(e_handler)
@@ -88,10 +92,10 @@ class ProgressPercentage(object):
 @backoff.on_exception(
     backoff.expo, (ValueError, MaxRetryError, ConnectionError), max_tries=5
 )
-def upload_file(path, key, count):
+def upload_file(path, key, count, total_count, remove_file=False):
     config = TransferConfig(
         multipart_threshold=1024 * 1024,
-        max_concurrency=5,
+        max_concurrency=24,
         multipart_chunksize=1024 * 1024,
         use_threads=True,
     )
@@ -104,7 +108,7 @@ def upload_file(path, key, count):
         use_ssl=True,
         config=Config(max_pool_connections=200),
     )
-    message = ''
+    message = ""
     try:
         obj = client.head_object(Bucket=BUCKET, Key=key)
         if (
@@ -121,7 +125,9 @@ def upload_file(path, key, count):
         message = f"Object with key {key} exist skipping.."
         logger.info(message)
         return key, False, message
-    extra_args = {}
+    extra_args = {
+        "StorageClass": "DEEP_ARCHIVE",
+    }
     if guess_type:
         mimetype = mimetypes.guess_type(path)
         if mimetype and mimetype[0]:
@@ -137,7 +143,8 @@ def upload_file(path, key, count):
         # Callback=ProgressPercentage(path),
         ExtraArgs=extra_args,
     )
-    logger.info(f"Uploaded ({count}) {path}")
+    logger.info(f"Uploaded ({count}/{total_count}) {path}")
+    os.remove(str(path))
     return key, True, message
 
 
@@ -147,67 +154,60 @@ def main(folder_path: Path, prefix_path: str = None):
         final_path = folder_path / prefix_path
     else:
         final_path = folder_path
-    # all_files = [
-    #     Path(f)
-    #     for f in glob.glob(str(final_path / "**"), recursive=True)
-    #     if Path(f).is_file()
-    # ]
-    # total_files_count = len(all_files)
-    # logger.info(f"Found {total_files_count}")
-    count = 0
+    total_count = 0
     uploaded_count = 1
-    data_files_upload_results = []
     files_to_upload = []
 
-    for file_path in glob.iglob(str(final_path / "**"), recursive=True):
-        count += 1
-        if not Path(file_path).is_file():
+    for file_path in glob.iglob(str(final_path / "**"), recursive=False):
+        total_count += 1
+        if not Path(file_path).exists():
             continue
         files_to_upload.append(file_path)
-        if count % 10000 == 0:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
-                for file_path_to_upload in files_to_upload:
-                    file_path_to_upload = Path(file_path_to_upload)
-                    related_file_path = file_path_to_upload.relative_to(folder_path)
-                    s3_key = str(related_file_path)
-                    logger.info(f"Uploading file {file_path_to_upload} with key {s3_key}")
-                    data_files_upload_results.append(
-                        executor.submit(
-                            upload_file, str(file_path_to_upload), s3_key, uploaded_count
-                        )
-                    )
-                    uploaded_count += 1
-            for future in data_files_upload_results:
-                key, uploaded, message = future.result()
-                if not uploaded:
-                    logger.error(f"Failed to upload file {key}, {message}")
-                else:
-                    logger.info(f"Successfully uploaded {key}")
-            data_files_upload_results = []
-            files_to_upload = []
-            logger.info(f'Total uploaded {count} files')
 
-    # files_to_upload could have files which was not uploaded because count % 10000 != 0
-    data_files_upload_results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=cpu_count) as executor:
-        for file_path_to_upload in files_to_upload:
-            file_path_to_upload = Path(file_path_to_upload)
-            related_file_path = file_path_to_upload.relative_to(folder_path)
+    for file_path_to_upload in files_to_upload:
+        file_path_to_upload = Path(file_path_to_upload)
+
+        if file_path_to_upload.is_dir():
+            remove_file = True
+            file_path_7z_to_upload = tmp_folder / file_path_to_upload.with_suffix('.7z').name
+            if file_path_7z_to_upload.is_file():
+                logger.warning(f"Tmp file exists {file_path_7z_to_upload}, will remove it!")
+                os.remove(str(file_path_7z_to_upload))
+            compress_args = [
+                "7z",
+                "a",
+                "-t7z",
+                str(file_path_7z_to_upload),
+                "-m0=lzma2",
+                "-mx=0",
+                "-mfb=64",
+                "-md=32m",
+                "-ms=on",
+                "-r",
+                str(file_path_to_upload),
+            ]
+            logger.info(f"Running {compress_args}")
+            try:
+                subprocess.call(compress_args)
+            except Exception:
+                logger.error(f"Failed to zip folder {file_path_to_upload}")
+                continue
+            related_file_path = file_path_7z_to_upload.relative_to(tmp_folder)
             s3_key = str(related_file_path)
-            logger.info(f"Uploading file {file_path_to_upload} with key {s3_key}")
-            data_files_upload_results.append(
-                executor.submit(
-                    upload_file, str(file_path_to_upload), s3_key, uploaded_count
-                )
-            )
-            uploaded_count += 1
-    for future in data_files_upload_results:
-        key, uploaded, message = future.result()
-        if not uploaded:
-            logger.error(f"Failed to upload file {key}, {message}")
+
+        elif file_path_to_upload.is_file():
+            remove_file = False
+            file_path_7z_to_upload = file_path_to_upload
+            related_file_path = file_path_7z_to_upload.relative_to(folder_path)
+            s3_key = str(related_file_path)
         else:
-            logger.info(f"Successfully uploaded {key}")
-    logger.info(f'Total uploaded {count} files')
+            logger.error(f"File/ does not exist {file_path_to_upload}")
+            continue
+        logger.info(
+            f"Uploading file {file_path_7z_to_upload} with key {s3_key}"
+        )
+        upload_file(str(file_path_7z_to_upload), s3_key, uploaded_count, total_count, remove_file)
+        uploaded_count += 1
 
 
 if __name__ == "__main__":
