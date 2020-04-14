@@ -2,6 +2,7 @@
 import argparse
 import mimetypes
 import multiprocessing
+import re
 import subprocess
 import concurrent.futures
 import glob
@@ -147,6 +148,20 @@ def upload_file(path, key, count, total_count, remove_file=False):
     os.remove(str(path))
     return key, True, message
 
+def get_valid_filename(s):
+    """
+    Return the given string converted to a string.
+
+    That can be used for a clean
+    filename. Remove leading and trailing spaces; convert other spaces to
+    underscores; and remove anything that is not an alphanumeric, dash,
+    underscore, or dot.
+    >>> get_valid_filename("john's portrait in 2004.jpg")
+    'johns_portrait_in_2004.jpg'
+    """
+    s = str(s).strip().replace(' ', '_')
+    s = re.sub(r'(?u)[^-\w.]', '', s)
+    return re.sub(r'[^\x00-\x7F]+', '_', s)
 
 def main(folder_path: Path, prefix_path: str = None):
     # Get all files in the folder recursively
@@ -169,7 +184,7 @@ def main(folder_path: Path, prefix_path: str = None):
 
         if file_path_to_upload.is_dir():
             remove_file = True
-            file_path_7z_to_upload = tmp_folder / file_path_to_upload.with_suffix('.7z').name
+            file_path_7z_to_upload = tmp_folder / get_valid_filename(file_path_to_upload.with_suffix('.7z').name)
             if file_path_7z_to_upload.is_file():
                 logger.warning(f"Tmp file exists {file_path_7z_to_upload}, will remove it!")
                 os.remove(str(file_path_7z_to_upload))
