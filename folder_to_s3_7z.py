@@ -88,6 +88,15 @@ class ProgressPercentage(object):
             )
             sys.stdout.flush()
 
+session = boto3.session.Session(
+    aws_access_key_id=ACCESS_KEY, aws_secret_access_key=SECRET_KEY,
+)
+client = session.client(
+    "s3",
+    endpoint_url=ENDPOINT,
+    use_ssl=True,
+    config=Config(max_pool_connections=200),
+)
 
 @backoff.on_exception(
     backoff.expo, (ValueError, MaxRetryError, ConnectionError), max_tries=5
@@ -99,15 +108,7 @@ def upload_file(path, key, count, total_count, remove_file=False):
         multipart_chunksize=1024 * 1024,
         use_threads=True,
     )
-    session = boto3.session.Session(
-        aws_access_key_id=ACCESS_KEY, aws_secret_access_key=SECRET_KEY,
-    )
-    client = session.client(
-        "s3",
-        endpoint_url=ENDPOINT,
-        use_ssl=True,
-        config=Config(max_pool_connections=200),
-    )
+
     message = ""
     try:
         obj = client.head_object(Bucket=BUCKET, Key=key)
@@ -184,6 +185,17 @@ def main(folder_path: Path, prefix_path: str = None):
         if file_path_to_upload.is_dir():
             remove_file = True
             file_path_7z_to_upload = tmp_folder / get_valid_filename(file_path_to_upload.with_suffix('.7z').name)
+            related_file_path = file_path_7z_to_upload.relative_to(tmp_folder)
+            s3_key = str(related_file_path)
+            try:
+                obj = client.head_object(Bucket=BUCKET, Key=s3_key)
+            except Exception as e:
+                pass
+            else:
+                if obj["ResponseMetadata"]["HTTPStatusCode"] == 200:
+                    logger.info(f"Object with key {s3_key} exist skipping..")
+                    continue
+
             if file_path_7z_to_upload.is_file():
                 logger.warning(f"Tmp file exists {file_path_7z_to_upload}, will remove it!")
                 os.remove(str(file_path_7z_to_upload))
@@ -206,8 +218,6 @@ def main(folder_path: Path, prefix_path: str = None):
             except Exception:
                 logger.error(f"Failed to zip folder {file_path_to_upload}")
                 continue
-            related_file_path = file_path_7z_to_upload.relative_to(tmp_folder)
-            s3_key = str(related_file_path)
 
         elif file_path_to_upload.is_file():
             remove_file = False
