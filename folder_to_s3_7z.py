@@ -170,7 +170,7 @@ def main(folder_path: Path, prefix_path: str = None):
     else:
         final_path = folder_path
     total_count = 0
-    uploaded_count = 1
+    uploaded_count = 0
     files_to_upload = []
 
     for file_path in glob.iglob(str(final_path / "**"), recursive=False):
@@ -181,6 +181,7 @@ def main(folder_path: Path, prefix_path: str = None):
 
     for file_path_to_upload in files_to_upload:
         file_path_to_upload = Path(file_path_to_upload)
+        uploaded_count += 1
 
         if file_path_to_upload.is_dir():
             remove_file = True
@@ -231,7 +232,6 @@ def main(folder_path: Path, prefix_path: str = None):
             f"Uploading file {file_path_7z_to_upload} with key {s3_key}"
         )
         upload_file(str(file_path_7z_to_upload), s3_key, uploaded_count, total_count, remove_file)
-        uploaded_count += 1
 
 
 if __name__ == "__main__":
