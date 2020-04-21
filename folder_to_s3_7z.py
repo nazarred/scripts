@@ -194,7 +194,7 @@ def main(folder_path: Path, prefix_path: str = None):
                 pass
             else:
                 if obj["ResponseMetadata"]["HTTPStatusCode"] == 200:
-                    logger.info(f"Object with key {s3_key} exist skipping..")
+                    logger.info(f"Object with key {s3_key} exist skipping({uploaded_count}/{total_count})..")
                     continue
 
             if file_path_7z_to_upload.is_file():
