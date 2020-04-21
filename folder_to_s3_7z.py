@@ -210,6 +210,7 @@ def main(folder_path: Path, prefix_path: str = None):
                 "-mfb=64",
                 "-md=32m",
                 "-ms=on",
+                "-mmt=8",
                 "-r",
                 str(file_path_to_upload),
             ]
